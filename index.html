@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>横スクロール・ランゲーム</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: sans-serif;
+        }
+        #gameContainer {
+            text-align: center;
+        }
+        canvas {
+            background-color: #fff;
+            border: 4px solid #333;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            display: block;
+        }
+        #scoreBoard {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        #instructions {
+            margin-top: 10px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+<div id="gameContainer">
+    <div id="scoreBoard">スコア: <span id="score">0</span></div>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <div id="instructions">【スペースキー】または【画面クリック】でジャンプ！</div>
+</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const scoreElement = document.getElementById("score");
+
+// ゲームの基本設定
+let score = 0;
+let gameOver = false;
+const gravity = 0.6;
+
+// プレイヤー（走る四角）
+const player = {
+    x: 100,
+    y: 300,
+    width: 40,
+    height: 40,
+    velocityY: 0,
+    jumpForce: -12,
+    isGrounded: false,
+    color: "#0095DD"
+};
+
+// 障害物のリスト
+let obstacles = [];
+let spawnTimer = 0;
+let minSpawnInterval = 90; // 次の障害物が出るまでの最小フレーム数
+
+// 地面の高さ
+const groundY = 340;
+
+// キー入力・クリックの監視
+function jump() {
+    if (player.isGrounded && !gameOver) {
+        player.velocityY = player.jumpForce;
+        player.isGrounded = false;
+    }
+    if (gameOver) {
+        resetGame();
+    }
+}
+
+window.addEventListener("keydown", (e) => {
+    if (e.code === "Space") {
+        e.preventDefault();
+        jump();
+    }
+});
+
+canvas.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    jump();
+});
+
+canvas.addEventListener("mousedown", () => {
+    jump();
+});
+
+// ゲームのリセット
+function resetGame() {
+    score = 0;
+    gameOver = false;
+    obstacles = [];
+    player.y = groundY - player.height;
+    player.velocityY = 0;
+    player.isGrounded = true;
+    scoreElement.textContent = score;
+    gameLoop();
+}
+
+// 障害物の生成
+function spawnObstacle() {
+    spawnTimer++;
+    // ランダムな間隔で障害物を出す
+    if (spawnTimer > minSpawnInterval + Math.random() * 60) {
+        const height = 30 + Math.random() * 40; // ランダムな高さ
+        const width = 20 + Math.random() * 20;  // ランダムな幅
+        obstacles.push({
+            x: canvas.width,
+            y: groundY - height,
+            width: width,
+            height: height,
+            speed: 6 + score * 0.1, // スコアが上がると少しずつ速くなる
+            color: "#FF4136"
+        });
+        spawnTimer = 0;
+    }
+}
+
+// 衝突判定
+function checkCollision(rect1, rect2) {
+    return rect1.x < rect2.x + rect2.width &&
+           rect1.x + rect1.width > rect2.x &&
+           rect1.y < rect2.y + rect2.height &&
+           rect1.y + rect1.height > rect2.y;
+}
+
+// ゲームループ
+function gameLoop() {
+    if (gameOver) {
+        // ゲームオーバー画面の描画
+        ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = "#FFF";
+        ctx.font = "bold 40px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2);
+        
+        ctx.font = "20px sans-serif";
+        ctx.fillText("スペースキーかクリックで再挑戦", canvas.width / 2, canvas.height / 2 + 50);
+        return;
+    }
+
+    // 画面のクリア
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 地面の描画
+    ctx.fillStyle = "#333";
+    ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+
+    // プレイヤーの物理演算
+    player.velocityY += gravity;
+    player.y += player.velocityY;
+
+    // 地面との着地判定
+    if (player.y >= groundY - player.height) {
+        player.y = groundY - player.height;
+        player.velocityY = 0;
+        player.isGrounded = true;
+    }
+
+    // プレイヤーの描画
+    ctx.fillStyle = player.color;
+    ctx.fillRect(player.x, player.y, player.width, player.height);
+
+    // 障害物の生成と更新
+    spawnObstacle();
+
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        let obs = obstacles[i];
+        obs.x -= obs.speed; // 左へ動かす
+
+        // 障害物の描画
+        ctx.fillStyle = obs.color;
+        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+
+        // 衝突判定
+        if (checkCollision(player, obs)) {
+            gameOver = true;
+        }
+
+        // 画面外に出た障害物の削除とスコア加算
+        if (obs.x + obs.width < 0) {
+            obstacles.splice(i, 1);
+            score++;
+            scoreElement.textContent = score;
+        }
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+// ゲームスタート
+resetGame();
+</script>
+
+</body>
+</html>
